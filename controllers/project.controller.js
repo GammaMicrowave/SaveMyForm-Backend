@@ -1,4 +1,5 @@
 import Project from '../models/project.model.js';
+import User from '../models/user.model.js';
 // import User from "../models/user.model.js";
 import verifycaptcha from '../utils/recaptcha.js';
 import {
@@ -107,42 +108,43 @@ export async function updateProject(req, res) {
 }
 
 export async function projectDashboard(req, res) {
-  const project = await Project.findById(req.params.id);
+  console.log(req.params.id);
+  let project = await Project.findOne({ id: req.params.id });
   if (!project) return response_400(res, 'No project with this id');
-  let allow = project.collaborators.includes(req.user._id);
-  if (!allow && project.owner !== req.user._id)
-    return response_400(res, 'You cannot access this project');
+  // let allow = project.collaborators.includes(req.user._id);
+  // if (!allow && project.owner !== req.user._id)
+  //   return response_400(res, 'You cannot access this project');
   try {
-    project = project
+    project = await Project.findOne({ id: req.params.id })
       .populate('forms', 'name submissions createdAt updatedAt')
       .populate('owner', 'name email')
-      .populate('collaborators', 'name email')
-      .aggregate()
-      .project({
-        _id: 0,
-        name: 1,
-        owner: 1,
-        collaborators: 1,
-        hasRecaptcha: 1,
-        recaptchaKey: 1,
-        recaptchaSecret: 1,
-        allowedOrigins: 1,
-        is_owner: { $eq: ['$$owner._id', req.user._id] },
-        form_count: { $count: '$forms' },
-        forms: {
-          $map: {
-            input: '$forms',
-            as: 'forms',
-            in: {
-              name: '$$forms.name',
-              createdAt: '$$forms.createdAt',
-              submission_count: { $count: '$$forms.submissions' },
-              last_updated: '$$forms.updatedAt',
-              submissions: 0,
-            },
-          },
-        },
-      });
+      .populate('collaborators', 'name email');
+    // .select('-_id');
+
+    // let owner = await User.findById(project.owner);
+    // let collaborators = project.collaborators.map(async (collaborator) => {
+    //   await User.findById(collaborator);
+    // });
+    console.log(project);
+    project = project.values();
+    // delete project._id;
+    // project.collaborators = collaborators.map((collaborator) => {
+    //   return {
+    //     name: collaborator.name,
+    //     email: collaborator.email,
+    //   };
+    // });
+
+    project.is_owner = project.owner._id === req.user._id ? true : false;
+    // form_count = project.forms.length;
+    // project.forms.map((form) => {
+    //   form = {
+    //     name: form.name,
+    //     date_created: form.createdAt,
+    //     submission_count: form.submissions.length,
+    //     last_updated: form.updatedAtl,
+    //   };
+    // });
     return response_200(res, 'Project Dashboard', project);
   } catch (error) {
     return response_500(res, 'Server error', error);
