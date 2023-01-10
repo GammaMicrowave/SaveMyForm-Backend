@@ -1,6 +1,7 @@
 import Project from '../models/project.model.js';
 import User from '../models/user.model.js';
 // import User from "../models/user.model.js";
+import Form from '../models/form.model.js';
 import verifycaptcha from '../utils/recaptcha.js';
 import {
   response_200,
@@ -108,43 +109,32 @@ export async function updateProject(req, res) {
 }
 
 export async function projectDashboard(req, res) {
-  console.log(req.params.id);
   let project = await Project.findOne({ id: req.params.id });
   if (!project) return response_400(res, 'No project with this id');
-  // let allow = project.collaborators.includes(req.user._id);
-  // if (!allow && project.owner !== req.user._id)
-  //   return response_400(res, 'You cannot access this project');
+  let allow = project.collaborators.includes(req.user._id);
+  if (!allow && project.owner !== req.user._id)
+    return response_400(res, 'You cannot access this project');
+
   try {
     project = await Project.findOne({ id: req.params.id })
-      .populate('forms', 'name submissions createdAt updatedAt')
+      .populate('forms', 'name submissions createdAt updatedAt -_id')
       .populate('owner', 'name email')
-      .populate('collaborators', 'name email');
-    // .select('-_id');
+      .populate('collaborators', 'name email -_id')
+      .select('-_id -createdAt -updatedAt -__v');
+    project = project.toJSON();
+    project.is_owner = project.owner._id === req.user._id;
+    delete project.owner._id;
+    project.allowRecaptcha = project.hasRecaptcha;
+    delete project.hasRecaptcha;
+    project.form_count = project.forms.length;
+    project.forms.forEach((form) => {
+      form.submission_count = form.submissions.length;
+      form.last_updated = form.updatedAt;
+      form.date_created = form.createdAt;
+      delete form.updatedAt;
+      delete form.createdAt;
+    });
 
-    // let owner = await User.findById(project.owner);
-    // let collaborators = project.collaborators.map(async (collaborator) => {
-    //   await User.findById(collaborator);
-    // });
-    console.log(project);
-    project = project.values();
-    // delete project._id;
-    // project.collaborators = collaborators.map((collaborator) => {
-    //   return {
-    //     name: collaborator.name,
-    //     email: collaborator.email,
-    //   };
-    // });
-
-    project.is_owner = project.owner._id === req.user._id ? true : false;
-    // form_count = project.forms.length;
-    // project.forms.map((form) => {
-    //   form = {
-    //     name: form.name,
-    //     date_created: form.createdAt,
-    //     submission_count: form.submissions.length,
-    //     last_updated: form.updatedAtl,
-    //   };
-    // });
     return response_200(res, 'Project Dashboard', project);
   } catch (error) {
     return response_500(res, 'Server error', error);
